@@ -1,0 +1,166 @@
+---
+title: "Association Rules"
+author: "Solon Karapanagiotis"
+date: "30 Jul 2016"
+output:
+  html_document:
+    highlight: haddock
+    pdf_document: default
+    toc: yes
+  pdf_document:
+    toc: yes
+bibliography: ~/Desktop/4th_semester/DataMining/Mine/Classification/datamining.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(arules)
+library(arulesViz)
+```
+
+**The [`arules`](https://cran.r-project.org/web/packages/arules/index.html) and [`arulesViz`](https://cran.r-project.org/web/packages/arulesViz/index.html) package need to be installed and loaded.**
+
+**The purpose is to describe the associations and patterns among the set of input variables (unsupervised learning problem).**
+
+```{r, echo=F}
+eyecolorgenderdata <- read.csv("~/Desktop/4th_semester/DataMining/Mine/Project/eyecolorgenderdata.csv", comment.char="#")
+```
+
+
+
+# Introduction
+
+The data were collected from students enrolled in an introductory statistics course at a large university in the US over a four year period. An opening course survey was administered to the students. The anonymous survey was available on the course website and contained questions on student
+demographic variables, such as gender, height, eye color, whether or not a student exercises and
+for how many hours per week, etc. After seven semesters, the full data set contains 2,068 records
+on 14 different categorical and quantitative variables [@froelich2013].
+
+```{r}
+str(eyecolorgenderdata)
+```
+
+
+
+
+# Methods
+I implement Association Rules based on @agrawal1994. 
+
+### Short background 
+An association rule is in the form of $A \Rightarrow B$, where A and B are two disjoint itemsets, referred to respectively as the lhs (left-hand side) and rhs (right-hand side) of the rule. The three most widely-used measures for selecting interesting rules are *support*, *confidence* and *lift*.
+
+ * *support*: the percentage of cases in the data that contains both A and B $[support(A \Rightarrow B) = P(A \cup B)]$, 
+ * *confidence*: the percentage of cases containing A that also contain B $[confidence(A \Rightarrow B)= [P(B|A)=\frac{P(A \cup B)}{P(A)}]$,
+ * *lift*: the ratio of confidence to the percentage of cases containing B $[lift(A \Rightarrow B) \frac{confidence(A \Rightarrow B)}{P(B)}= \frac{P(A \cup B)}{P(A)P(B)}].$
+
+where $P(A)$ is the percentage (or probability) of cases containing A. 
+
+I implement the APRIORI algorithm here [@agrawal1994]. Median splits are used for the quantitative variables. 
+
+```{r}
+eyecolorgenderdata[["age"]] <- factor((as.numeric(eyecolorgenderdata[["age"]]) >
+                                         median(eyecolorgenderdata$age,  na.rm = T)) + 1, 
+                                      levels = 1 : 2 , labels = c("younger", "older"))
+
+eyecolorgenderdata[["height"]] <- factor((as.numeric(eyecolorgenderdata[["height"]]) >
+                                            median(eyecolorgenderdata$height, na.rm = T))+1, 
+                                         levels = 1 : 2 , labels = c("taller", "shorter"))
+
+eyecolorgenderdata[["miles"]] <- factor((as.numeric(eyecolorgenderdata[["miles"]]) >
+                                           median(eyecolorgenderdata$miles, na.rm = T))+1, 
+                                        levels = 1 : 2 , labels = c("closer", "away"))
+
+eyecolorgenderdata[["computertime"]] <- factor((as.numeric(eyecolorgenderdata[["computertime"]]) >
+                                                  median(eyecolorgenderdata$computertime, 
+                                                         na.rm = T))+1, 
+                                               levels = 1 : 2 , labels = c("compLow", "compHigh"))
+
+eyecolorgenderdata[["exercisehours"]] <- factor((as.numeric(eyecolorgenderdata[["exercisehours"]]) >
+                                                   median(eyecolorgenderdata$exercisehours, 
+                                                          na.rm = T))+1, 
+                                                levels = 1 : 2 , labels = c("exercLow", "exercHigh"))
+
+eyecolorgenderdata[["musiccds"]] <- factor((as.numeric(eyecolorgenderdata[["musiccds"]]) >
+                                              median(eyecolorgenderdata$musiccds, na.rm = T))+1, 
+                                           levels = 1 : 2 , labels = c("musicLow", "musicHigh"))
+
+eyecolorgenderdata[["playgames"]] <- factor((as.numeric(eyecolorgenderdata[["playgames"]]) >
+                                               median(eyecolorgenderdata$playgames,  na.rm = T))+1,
+                                            levels = 1 : 2 , labels = c("gamesLow", "gamesHigh"))
+
+eyecolorgenderdata[["watchtv"]] <- factor((as.numeric(eyecolorgenderdata[["watchtv"]]) >
+                                             median(eyecolorgenderdata$watchtv, na.rm = T))+1, 
+                                          levels = 1 : 2 , labels = c("TVLow", "TVHigh"))
+
+eyecolorgenderdata[["brothers"]] <- as.factor(eyecolorgenderdata[["brothers"]])
+
+eyecolorgenderdata[["sisters"]] <- as.factor(eyecolorgenderdata[["sisters"]])
+
+eyecolorgenderdata.raw <- eyecolorgenderdata
+```
+
+I use the `apriori()` function for the association rule mining. 
+
+```{r}
+# all rules
+rules.all <- apriori(eyecolorgenderdata.raw, control = list(verbose=F), 
+                 parameter = list(minlen=2, maxlen=10, supp=0.005, conf=0.8))
+rules.all
+```
+
+  * The *support*, *confidence* and the *min-maximum length* of rules were set to 0.005, 0.8, 2-10, respectively     
+      *  The minimum support (`supp`) of 0.005, implies that each rule is supported at least by 11 (=ceiling(0.005*2068)) cases, which is acceptable for a sample of 2,068.
+      *  min (`minlen`) and max (`maxlen`) length of rules: the min length is set to 2 to avoid the left-hand side (lhs) of any rule to be empty.
+   *  the details of progress are suppressed with `verbose=F`.
+
+These specifications create many uninteresting rules (520013 in total!). To make things more interpretable I focus on rules with indicating the eye colour (blue, brown, green, hazel, other) as consequent (right-hand side).
+
+```{r}
+rules <- apriori(eyecolorgenderdata.raw, control = list(verbose=F), 
+                 parameter = list(minlen=2, maxlen=10, supp=0.005, conf=0.8), 
+                 appearance = list(rhs=c("eyecolor=blue", "eyecolor=brown", "eyecolor=green",
+                                         "eyecolor=hazel", "eyecolor=other"), default="lhs"))
+```
+
+Since I am interested in only rules with rhs indicating eyecolor, I set `rhs=c("eyecolor=blue", "eyecolor=brown", "eyecolor=green", "eyecolor=hazel", "eyecolor=other")`. All other items can appear in the lhs, as set with `default="lhs"`. After association rule mining, rules are sorted by lift to make high-lift rules appear first.
+
+```{r}
+rules.sorted <- sort(rules, by="lift")
+inspect(head(rules.sorted)) #prints the first 6 rules
+```
+
+Some rules generated provide little or no
+extra information when some other rules are in the result. For example, the above rule 2 provides
+no extra knowledge in addition to rule 1, since rules 1 tells us that whatever the exercisehours
+the eye color is brown. Generally speaking, when a rule (such as rule 2) is a super rule of another rule (such as rule 1) and the former has the same or a lower lift, the former rule (rule 2) is considered to be redundant. Other redundant rules in the above result are rules 5, 7, 11, 16, 19 and 21.
+
+```{r}
+# find redundant rules
+subset.matrix <- is.subset(rules.sorted, rules.sorted) # function is.subset(r1, r2) checks whether r1 is a subset of r2 (i.e., whether r2 is a superset of r1).
+subset.matrix[lower.tri(subset.matrix, diag=T)] <- NA
+redundant <- colSums(subset.matrix, na.rm=T) >= 1
+which(redundant)
+```
+
+Below I prune redundant rules. Note that the rules have already been sorted descendingly by lift.
+
+```{r}
+# remove redundant rules
+rules.pruned <- rules.sorted[!redundant]
+inspect(rules.pruned)
+```
+
+
+
+# Results
+The 17 remaining rules are shown graphically in the figure. It is balloon plot with antecedent groups (lhs) as columns and consequents as rows (rhs). The colour of the balloons represent the aggregated lift in the group with a certain consequent and the size of the balloon shows the aggregated support. The number of antecedents and the most important (frequent) items in the group are displayed as the labels for the columns. Furthermore, the columns and rows in the plot are reordered such that the lift is decreasing from top down and from left to right, placing the most interesting group in the top left corner. It is the rule which contain "males"" and 5 other items (sisters=0, computertime=compHigh, exercise=No, musiccds=musicLow, playgames=gamesLow) in the antecedent and the consequent is "brown eyecolour". The support value for this rule is 0.005 and means the antecedents and the consequent appeared together in 0.5% of the cases. The confidence of 0.92 for this rule implies that when a student has the previously specified antecedents, 92% of the time he has brown eyes. To be noted that the other 3 categories of eye colour are not represented by a rule.
+
+```{r, fig.height=7}
+plot(rules.pruned, method="grouped")
+```
+
+
+# Discussion
+Association Rules identified items with high confidence. Nevertheless, 3 out of the 5 eye colour categories where not represented in the results. This can be interpreted as absence of association or correlation between groups of variables and the 3 remaining categories. It can be attributed or to a real absence of association or a limitation of the algorithm. Such a limitation could be the restrictive form of the data to which it can be applied, namely the discretisation of continuous variables. Another limitation is that rules with high confidence or lift, but low support, are not discovered. To overcome this shortcoming we fixed a low support value which also made sense for our dataset.
+
+
+# References
